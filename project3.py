@@ -316,10 +316,14 @@ def open_chain_phase_diagrams():
     plt.imshow(
         current_grid,
         origin="lower",
-        extent=[0.5, 0.95, 0.05, 0.95],
+        extent=[0.05, 0.95, 0.05, 0.95],
         aspect="auto",
         cmap="viridis"
     )
+    plt.plot([0.05, 0.5], [0.05, 0.5], "w--", linewidth=2)
+    plt.plot([0.5, 0.95], [0.5, 0.5], "w--", linewidth=2)
+    plt.plot([0.5, 0.95], [0.5, 0.5], "w--", linewidth=2)
+
     plt.colorbar(label="Current J")
     plt.xlabel("Exit rate beta")
     plt.ylabel("Entry rate alpha")
@@ -339,6 +343,11 @@ def open_chain_phase_diagrams():
         vmin=0,
         vmax=1
     )
+    # exact theoretical phase boundaries
+    plt.plot([0.05, 0.5], [0.05, 0.5], "w--", linewidth=2)
+    plt.plot([0.5, 0.95], [0.5, 0.5], "w--", linewidth=2)
+    plt.plot([0.5, 0.95], [0.5, 0.5], "w--", linewidth=2)
+
     plt.colorbar(label="Bulk density")
     plt.xlabel("Exit rate beta")
     plt.ylabel("Entry rate alpha")
@@ -451,13 +460,13 @@ def plot_current_vs_density():
         print("Densities:", len(densities))
         print("Simulated currents:", len(simulated))
 
-        plt.xlabel("Density")
-        plt.ylabel("Current J")
-        plt.title("Parallel update: current vs density")
-        plt.legend(fontsize=8)
-        plt.grid(True)
-        plt.tight_layout()
-        plt.show()
+    plt.xlabel("Density")
+    plt.ylabel("Current J")
+    plt.title("Parallel update: current vs density")
+    plt.legend(fontsize=8)
+    plt.grid(True)
+    plt.tight_layout()
+    plt.show()
 
 def plot_open_density_profiles():
     L = 200
@@ -510,6 +519,32 @@ def plot_open_density_profiles():
 # =========================================== PART C =======================================================
 # Validation Tests
 
+def measure_rule184_transient(L, N, rng):
+    lattice = initialise_ring(L, N, rng)
+    # store initial configuration and its time step
+    seen = {tuple(lattice): 0}
+    hop_history = []
+
+    # only 2**L possible configurations
+    for step in range(1, 2**L + 2):
+        hops = parallel_ring_step(lattice, p=1.0, rng=rng)
+        hop_history.append(hops)
+
+        state = tuple(lattice)
+
+        # repeated configuration means system has entered cycle
+        if state in seen:
+            transient = seen[state]
+            period = step - transient
+            # calculate current over repeating cycle
+            cycle_hops = hop_history[transient:step]
+            cycle_current = np.mean(cycle_hops) / L
+
+            return transient, period, cycle_current
+        seen[state] = step
+    raise RuntimeError("No repeated state was found")
+
+
 def run_part_c_tests():
     """Run theoretical validation tests for Part C"""
     rng = np.random.default_rng(42)
@@ -518,31 +553,36 @@ def run_part_c_tests():
     # =============================
     # TEST 1: Open chain with L = 1
     # =============================
-
+    print("TEST 1: Open chain, L = 1")
     L = 1
-    alpha = 0.4
-    beta = 0.6
-
+    parameter_pairs = [
+        (0.2, 0.4),
+        (0.4, 0.6),
+        (0.7, 0.3)
+    ]
     sweeps = 100000
     burn_in = 10000
+    for alpha, beta in parameter_pairs:
+        current, error, profile = simulate_open_random(
+            L=L,
+            alpha=alpha,
+            beta=beta,
+            sweeps=sweeps,
+            burn_in=burn_in,
+            rng=rng
+        )
+        exact_density = alpha / (alpha + beta)
+        exact_current = alpha * beta / (alpha + beta)
 
-    current, error, profile = simulate_open_random(
-        L=L,
-        alpha=alpha,
-        beta=beta,
-        sweeps=sweeps,
-        burn_in=burn_in,
-        rng=rng
-    )
-    exact_density = alpha / (alpha + beta)
-    exact_current = alpha * beta / (alpha + beta)
+        print(f"\nalpha = {alpha}, beta = {beta}")
+        print(f"Simulated density: {profile[0]:.5f}")
+        print(f"Exact density:     {exact_density:.5f}")
+        print(f"Simulated current: {current:.5f}")
+        print(f"Exact current:     {exact_current:.5f}")
+        print(f"Estimated error:   {error:.5f}")
 
-    print("TEST 1: Open chain, L = 1")
-    print(f"Simulated density: {profile[0]:.5f}")
-    print(f"Exact density:     {exact_density:.5f}")
-    print(f"Simulated current: {current:.5f}")
-    print(f"Exact current:     {exact_current:.5f}")
-    print(f"Estimated error:   {error:.5f}\n")
+    print()
+
 
     # ===================================================
     # TEST 2: Exact Finite-Size Current, alpha = beta = 1
@@ -617,26 +657,17 @@ def run_part_c_tests():
     rng_transient = np.random.default_rng(42)
 
     for N in range(L + 1):
-        lattice = initialise_ring(L, N, rng_transient)
-        # exact number of hops in steady state
-        target_hops = min(N, L - N)
+        transient, period, cycle_current = measure_rule184_transient(
+            L, N, rng_transient
+        )
+        exact_current = min(N, L - N) / L
 
-        if target_hops == 0:
-            transient_duration = 0
-        else:
-            transient_duration = None
-            for t in range(1, 100 * L + 1):
-                hops = parallel_ring_step(
-                    lattice,
-                    p=1.0,
-                    rng=rng_transient
-                )
-                if hops == target_hops:
-                    transient_duration = t
-                    break
         print(
-            f"N = {N:2d}: transient duration = "
-            f"{transient_duration} time steps"
+            f"N = {N:2d}: "
+            f"transient = {transient:2d}, "
+            f"cycle period = {period:2d}, "
+            f"cycle current = {cycle_current:.5f}, "
+            f"exact current = {exact_current:.5f}"
         )
 
     # ==============================
@@ -790,7 +821,11 @@ def simulate_shock(L=4000, rho_L=0.2, rho_R=0.6,
     for run in range(realisations):
         # initialise two regions with random occupation
         lattice = np.zeros(L, dtype=int)
+
         lattice[:half] = (
+            rng.random(half) < rho_L
+        ).astype(int)
+        lattice[half:] = (
             rng.random(L - half) < rho_R
         ).astype(int)
 
@@ -842,8 +877,6 @@ def plot_shock():
             label=f"t = {t}"
         )
         if t > 0:
-            # find position where density crosses midpoint between the two bulk densities
-            midpoint = (rho_L + rho_R) / 2
 
             # smooth density profile to reduce fluctuations
             window_size = 51
@@ -854,23 +887,12 @@ def plot_shock():
                 kernel,
                 mode="same"
             )
-            # search for shock near expected position
-            expected_position = 0.2 * t
-        
-            search_indices = np.where(
-                (x >= expected_position - 100) &
-                (x <= expected_position + 100)
-            )[0]
-            crossing = search_indices[
-                np.argmin(
-                    np.abs(
-                        smoothed_profile[search_indices] - midpoint
-                    )
-                )
-            ]
-            measured_positions.append(
-                (t, x[crossing])
-            )
+            # locate shock using steepest density increase
+            gradient = np.gradient(smoothed_profile, x)
+            crossing = np.argmax(gradient)
+
+            measured_positions.append((t, x[crossing]))
+
     plt.xlabel("Position from initial interface")
     plt.ylabel("Average density")
     plt.title("Shock propagation on a ring (L = 4000)")
