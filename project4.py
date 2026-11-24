@@ -343,7 +343,7 @@ for i in range(len(B_values)):
         ',k', alpha=0.5
     )
 ax1.set_ylabel("x")
-ax2.set_title("Bifurcation Diagram of the Gauss Map")
+ax2.set_title("Bifurcation Diagram of the Gauss Map (alpha = 4.9)")
 ax1.grid(alpha=0.3)
 
 # Lyapunov exponent
@@ -351,13 +351,13 @@ ax2.plot(B_values, lyapunov_values, color='blue')
 ax2.axhline(0, color='red', linestyle='--')
 ax2.set_xlabel("B")
 ax2.set_ylabel("Lyapunov Exponent")
-ax2.set_title("Lyapunov Exponent")
+ax2.set_title("Lyapunov Exponent (alpha = 4.9)")
 ax2.grid(alpha=0.3)
 
 plt.tight_layout()
 plt.show()
 
-# 20.1 Hysteresis: Incres=asing and Decreasing B
+# 20.1 Hysteresis: Increasing and Decreasing B
 def hysteresis_sweep(B_values, a=4.9, x0=0.0,
                      transient=1000, iterations=100):
     x = x0
@@ -447,19 +447,37 @@ bifurcation_data_75 = iterate_gauss_map(
     transient=1000,
     iterations=500
 )
-# plot bifurcation diagram
-plt.figure(figsize=(12, 6))
+# calculate Lyapunov exponents
+lyapunov_values_75 = lyapunov_exponent(
+    B_values_75,
+    a=a_75,
+    x0=0.0,
+    transient=1000,
+    iterations=500
+)
+
+# create two plots sharing the same B-axis
+fig, (ax1, ax2) = plt.subplots(
+    2, 1, figsize=(12, 9), sharex=True
+)
+# Bifurcation diagram
 for i in range(len(B_values_75)):
-    plt.plot(
+    ax1.plot(
         [B_values_75[i]] * bifurcation_data_75.shape[0],
-        bifurcation_data_75[:, i],
-        ',k',
-        alpha=0.5
+         bifurcation_data_75[:, i],
+         ',k',
+         alpha=0.5
     )
-plt.xlabel("B")
-plt.ylabel("x")
-plt.title("Bifurcation Diagram of the Gauss Map (a = 7.5)")
-plt.grid(alpha=0.3)
+ax1.set_ylabel("x")
+ax2.set_title("Bifurcation Diagram of the Gauss Map (alpha = 7.5)")
+
+ax2.plot(B_values_75, lyapunov_values_75, color='blue')
+ax2.axhline(0, color='red', linestyle='--')
+ax2.set_xlabel("B")
+ax2.set_ylabel("Lyapunov Exponent")
+ax2.set_title("Lyapunov Exponent (alpha = 7.5)")
+ax2.grid(alpha=0.3)
+
 plt.tight_layout()
 plt.show()
 
