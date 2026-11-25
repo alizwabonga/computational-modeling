@@ -15,7 +15,7 @@ B_max = 1.0
 def gauss_map(x, B, a=4.9):
     return np.exp(-a * x**2) + B
 
-def gauss_derivative(x, a=4.0):
+def gauss_derivative(x, a=4.9):
     return -2 * a * x * np.exp(-a * x**2)
 
 # ================== 3. Initial Tests ===================
@@ -316,7 +316,7 @@ print("Exact orbit Lyapunov exponent:", lambda_period2)
 print("Long-time Lyapunov exponent:", lambda_long)
 print("Absolute difference:", abs(lambda_period2 - lambda_long))
 
-# 19. Bifurcation Diagram and Lyapunov Exponent
+# 19. Bifurcation Diagram and Lyapunov Exponent (a = 4.9)
 
 #Paraeter values
 B_values = np.linspace(-1.1, 1.0, 2000)
@@ -329,7 +329,7 @@ bifurcation_data = iterate_gauss_map(
 # calculate Lyapunov exponents
 lyapunov_values = lyapunov_exponent(
     B_values, a=a, x0=0.0,
-    transient = 100, iterations=500
+    transient = 1000, iterations=500
 )
 # create two plots sharing the B-axis
 fig, (ax1, ax2) = plt.subplots(
@@ -343,7 +343,7 @@ for i in range(len(B_values)):
         ',k', alpha=0.5
     )
 ax1.set_ylabel("x")
-ax2.set_title("Bifurcation Diagram of the Gauss Map (alpha = 4.9)")
+ax1.set_title("Bifurcation Diagram of the Gauss Map (alpha = 4.9)")
 ax1.grid(alpha=0.3)
 
 # Lyapunov exponent
@@ -365,7 +365,7 @@ def hysteresis_sweep(B_values, a=4.9, x0=0.0,
 
     for i, B_value in enumerate(B_values):
         # allow system to settle at the current B
-        for n in range(iterations):
+        for n in range(transient):
             x = gauss_map(x, B_value, a)
         # record final iterations
         for n in range(iterations):
@@ -469,7 +469,7 @@ for i in range(len(B_values_75)):
          alpha=0.5
     )
 ax1.set_ylabel("x")
-ax2.set_title("Bifurcation Diagram of the Gauss Map (alpha = 7.5)")
+ax1.set_title("Bifurcation Diagram of the Gauss Map (alpha = 7.5)")
 
 ax2.plot(B_values_75, lyapunov_values_75, color='blue')
 ax2.axhline(0, color='red', linestyle='--')
@@ -537,10 +537,12 @@ def fixed_point_derivative(x):
     return gauss_derivative(x, a) - 1
 
 # calculate accurate reference root
-reference_results = bisection(
-    fixed_point_function, 0.5, 0.8, tol=1e-14
-)
-reference_root = reference_results[-1]
+reference_root = newton(
+    fixed_point_function, fixed_point_derivative,
+    x0=0.65,
+    tol=1e-15,
+    max_iter=100
+)[-1]
 
 # apply all three root-finding methods
 bisection_results = bisection(
@@ -563,6 +565,10 @@ secant_results = secant(
 bisection_errors = np.abs(bisection_results - reference_root)
 newton_errors = np.abs(newton_results - reference_root)
 secant_errors = np.abs(secant_results - reference_root)
+# avoid zero values on the logarithmic plot
+bisection_plot_errors = np.maximum(bisection_errors, np.finfo(float).eps)
+newton_plot_errors = np.maximum(newton_errors, np.finfo(float).eps)
+secant_plot_errors = np.maximum(secant_errors, np.finfo(float).eps)
 
 print("\nBisection errors:", bisection_errors)
 print("Newton errors:", newton_errors)
@@ -571,21 +577,21 @@ print("Secant errors:", secant_errors)
 # plot convergence on a logarithmic scale
 plt.figure(figsize=(10, 6))
 plt.semilogy(
-    range(1, len(bisection_errors) + 1),
+    range(1, len(bisection_plot_errors) + 1),
     bisection_errors,
     'o-',
     label="Bisection"
 )
 
 plt.semilogy(
-    range(len(newton_errors)),
+    range(len(newton_plot_errors)),
     newton_errors,
     's-',
     label="Newton"
 )
 
 plt.semilogy(
-    range(len(secant_errors)),
+    range(len(secant_plot_errors)),
     secant_errors,
     '^-',
     label="Secant"
@@ -622,15 +628,23 @@ def estimate_order(errors, method_name):
 
     # estimate p using three consecutive errors
     orders = []
+
     for i in range(1, len(errors) - 1):
         e_previous = errors[i - 1]
         e_current = errors[i]
         e_next = errors[i + 1]
+        # skip errors affected by floating-point precision
+        if min(e_previous, e_current, e_next) <= np.finfo(float).eps:
+            continue
+        if not (e_next < e_current < e_previous):
+            continue
 
         denominator = np.log(e_current / e_previous)
+
         if denominator != 0:
             p = np.log(e_next / e_current) / denominator
-            orders.append(p)
+            if np.isfinite(p):
+                orders.append(p)
 
     if orders:
         print(f"{method_name} estimated orders:",
@@ -1196,7 +1210,7 @@ print(periodic_lyapunov)
 long_time_lyapunov = lyapunov_exponent(
     np.array([beta_test]),
     a=alpha_test,
-    x0=x1,
+    x0=orbit_x1,
     transient=1000,
     iterations=20000
 )[0]
